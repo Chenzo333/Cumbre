@@ -289,17 +289,17 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .toggle-switch.on::after{left:19px}
 
 /* ─── NOTAS ─── */
-.notas-layout{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100% + 56px);overflow:hidden;margin:-28px;border-radius:0}
-.notas-sidebar{background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100%;overflow:hidden}
-.notas-sidebar-header{padding:20px 18px 14px;border-bottom:1px solid var(--border2);flex-shrink:0}
-.notas-sidebar-title{font-size:14px;font-weight:600;color:var(--t1);letter-spacing:-0.2px;margin-bottom:12px}
+.notas-layout{display:grid;grid-template-columns:260px 1fr;gap:0;flex:1;overflow:hidden;min-height:0}
+.notas-sidebar{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rlg);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.notas-sidebar-header{padding:16px 14px 12px;border-bottom:1px solid var(--border2);flex-shrink:0}
+.notas-sidebar-title{font-size:13px;font-weight:600;color:var(--t1);letter-spacing:-0.1px;margin-bottom:10px}
 .notas-search{position:relative}
 .notas-search input{width:100%;background:var(--bg);border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:8px 12px 8px 32px;font-family:var(--font);font-size:12px;color:var(--t1);outline:none;transition:all 0.15s}
 .notas-search input:focus{border-color:var(--blue-border);box-shadow:0 0 0 3px var(--blue-soft);background:white}
 .notas-search input::placeholder{color:var(--t4)}
 .notas-search i{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--t4);pointer-events:none}
-.notas-filters{padding:10px 18px;border-bottom:1px solid var(--border2);display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0}
-.nota-filter-btn{padding:4px 10px;border-radius:20px;border:1px solid rgba(0,0,0,0.08);background:none;font-family:var(--font);font-size:11px;color:var(--t3);cursor:pointer;transition:all 0.12s}
+.notas-filters{padding:8px 14px;border-bottom:1px solid var(--border2);display:flex;gap:4px;flex-wrap:nowrap;flex-shrink:0;overflow-x:auto}
+.nota-filter-btn{padding:4px 9px;border-radius:20px;border:1px solid rgba(0,0,0,0.08);background:none;font-family:var(--font);font-size:10.5px;color:var(--t3);cursor:pointer;transition:all 0.12s;white-space:nowrap;flex-shrink:0}
 .nota-filter-btn.active{background:var(--t1);color:white;border-color:var(--t1)}
 .notas-list-scroll{flex:1;overflow-y:auto;padding:8px}
 .nota-list-item{padding:12px;border-radius:10px;cursor:pointer;transition:all 0.12s;margin-bottom:3px;border:1px solid transparent}
@@ -320,7 +320,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .notas-empty-list i{font-size:32px}.notas-empty-list p{font-size:12px;line-height:1.5}
 
 /* Editor */
-.nota-editor-area{display:flex;flex-direction:column;height:100%;overflow:hidden;background:white}
+.nota-editor-area{display:flex;flex-direction:column;overflow:hidden;background:white;border:1px solid var(--border);border-radius:var(--rlg);margin-left:12px;min-height:0}
 .nota-editor-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--t4)}
 .nota-editor-empty i{font-size:40px}.nota-editor-empty p{font-size:13px}
 .nota-editor-header{padding:22px 28px 0;flex-shrink:0}
@@ -551,8 +551,8 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     </div>
 
     <!-- NOTAS -->
-    <div id="page-notas" class="page" style="padding:0;overflow:hidden">
-      <div class="notas-layout">
+    <div id="page-notas" class="page" style="padding:0;gap:0;overflow:hidden;flex-direction:column">
+      <div class="notas-layout" style="display:grid;grid-template-columns:260px 1fr;gap:0;flex:1;overflow:hidden;min-height:0;padding:28px;box-sizing:border-box;width:100%;height:100%;background:var(--bg)">
         <!-- Sidebar de notas -->
         <div class="notas-sidebar">
           <div class="notas-sidebar-header">
@@ -1400,6 +1400,11 @@ function renderNotaEditor(n){
   const area=document.getElementById('notaEditorArea');
   const type=n.type||'captura';
   const tags=(n.tags||[]).map((t,i)=>`<span class="nota-tag">#${t}<span class="nota-tag-x" onclick="removeNotaTag('${n.id}',${i})">×</span></span>`).join('');
+  const catButtons=['','trading','musica','academia','personal'].map(c=>{
+    const labels={'':'Sin cat','trading':'💹 Trading','musica':'🎵 Música','academia':'📚 Academia','personal':'🌱 Personal'};
+    const isActive=(n.category||'')===c;
+    return`<button class="nota-type-btn ${isActive?'active-reflexion':''}" onclick="changeNotaCat('${n.id}','${c}')" style="font-size:10.5px">${labels[c]}</button>`;
+  }).join('');
   const typeButtons=['captura','reflexion','semilla'].map(t=>{
     const labels={captura:'⚡ Captura',reflexion:'🧠 Reflexión',semilla:'🌱 Semilla'};
     const isActive=type===t;
@@ -1414,13 +1419,9 @@ function renderNotaEditor(n){
     <div class="nota-editor-header">
       <div class="nota-editor-meta">
         <div class="nota-type-selector">${typeButtons}</div>
-        <select class="nota-cat-select" onchange="changeNotaCat('${n.id}',this.value)">
-          <option value="" ${!n.category?'selected':''}>Sin categoría</option>
-          <option value="trading" ${n.category==='trading'?'selected':''}>💹 Trading</option>
-          <option value="musica" ${n.category==='musica'?'selected':''}>🎵 Música</option>
-          <option value="academia" ${n.category==='academia'?'selected':''}>📚 Academia</option>
-          <option value="personal" ${n.category==='personal'?'selected':''}>🌱 Personal</option>
-        </select>
+      </div>
+      <div class="nota-editor-meta" style="margin-bottom:0;margin-top:-8px">
+        <div class="nota-type-selector" style="flex-wrap:wrap">${catButtons}</div>
         <div class="nota-date-display">${formatDate(n.updatedAt||n.createdAt)}</div>
       </div>
       <textarea class="nota-title-input" id="notaTitleInput" placeholder="Título de la nota..." rows="1" oninput="autoResizeTextarea(this);scheduleNotaSave('${n.id}')">${n.title||''}</textarea>
@@ -1528,7 +1529,10 @@ window.changeNotaType=async(id,type)=>{
 };
 
 window.changeNotaCat=async(id,category)=>{
-  await updateDoc(doc(db,'users',currentUser.uid,'notas',id),{category,updatedAt:new Date().toISOString()});
+  const n=notas.find(x=>x.id===id);
+  // Toggle: clicking same category deselects it
+  const newCat=(n&&n.category===category&&category!=='')?'':category;
+  await updateDoc(doc(db,'users',currentUser.uid,'notas',id),{category:newCat,updatedAt:new Date().toISOString()});
 };
 
 window.addNotaTag=async(id)=>{
