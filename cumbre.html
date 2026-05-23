@@ -640,26 +640,53 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       <div id="createStep2" style="display:none">
         <div id="s2-consistencia">
           <div class="form-group">
-            <label class="form-label">¿Cuántos días por semana?</label>
-            <div class="freq-row">
-              <div class="freq-stepper">
-                <button class="freq-btn" onclick="changeFreq(-1)">−</button>
-                <div class="freq-val" id="freqVal">4</div>
-                <button class="freq-btn" onclick="changeFreq(1)">+</button>
-              </div>
-              <div class="freq-label">días de 7</div>
+            <label class="form-label">Frecuencia</label>
+            <div class="period-selector" id="freqTypeSelector">
+              <div class="period-opt selected" data-freqtype="semanal" onclick="selectFreqType(this)">Semanal</div>
+              <div class="period-opt" data-freqtype="mensual" onclick="selectFreqType(this)">Mensual</div>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">¿Qué días?</label>
-            <div class="period-selector" id="daySelector">
-              <div class="period-opt selected" data-day="L">L</div>
-              <div class="period-opt selected" data-day="M">M</div>
-              <div class="period-opt" data-day="X">X</div>
-              <div class="period-opt selected" data-day="J">J</div>
-              <div class="period-opt" data-day="V">V</div>
-              <div class="period-opt" data-day="S">S</div>
-              <div class="period-opt" data-day="D">D</div>
+          <div id="freqSemanal">
+            <div class="form-group">
+              <label class="form-label">¿Cuántos días por semana?</label>
+              <div class="freq-row">
+                <div class="freq-stepper">
+                  <button class="freq-btn" onclick="changeFreq(-1)">−</button>
+                  <div class="freq-val" id="freqVal">4</div>
+                  <button class="freq-btn" onclick="changeFreq(1)">+</button>
+                </div>
+                <div class="freq-label">días de 7</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">¿Qué días?</label>
+              <div class="period-selector" id="daySelector">
+                <div class="period-opt selected" data-day="L">L</div>
+                <div class="period-opt selected" data-day="M">M</div>
+                <div class="period-opt" data-day="X">X</div>
+                <div class="period-opt selected" data-day="J">J</div>
+                <div class="period-opt" data-day="V">V</div>
+                <div class="period-opt" data-day="S">S</div>
+                <div class="period-opt" data-day="D">D</div>
+              </div>
+            </div>
+          </div>
+          <div id="freqMensual" style="display:none">
+            <div class="form-group">
+              <label class="form-label">¿Cuántas veces por mes?</label>
+              <div class="freq-row">
+                <div class="freq-stepper">
+                  <button class="freq-btn" onclick="changeFreqMensual(-1)">−</button>
+                  <div class="freq-val" id="freqMensualVal">1</div>
+                  <button class="freq-btn" onclick="changeFreqMensual(1)">+</button>
+                </div>
+                <div class="freq-label">vez/veces por mes</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">¿Hasta cuándo? (opcional)</label>
+              <input type="date" class="form-input" id="metaEndDate">
+              <div style="font-size:10px;color:var(--t3);margin-top:4px">Ej: fin de año para 12 retiros en 12 meses</div>
             </div>
           </div>
         </div>
@@ -859,6 +886,13 @@ function isAtRisk(m){
 function getProgress(m){
   if(m.type==='consistencia'){
     const days=m.completedDays||[],freq=m.freq||4;
+    if(m.freqType==='mensual'){
+      const now=new Date();
+      const monthStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const count=days.filter(d=>d.startsWith(monthStr)).length;
+      const target=m.freqMensual||1;
+      return{current:count,total:target,pct:Math.min(100,Math.round(count/target*100)),isMonthly:true,totalDone:days.length};
+    }
     const now=new Date(),dow=now.getDay();
     const ws=new Date(now);ws.setDate(now.getDate()-(dow===0?6:dow-1));
     let count=0;
@@ -971,7 +1005,14 @@ function renderMetasList(){
   }else{
     head.innerHTML='<div class="th"></div><div class="th">Meta</div><div class="th">Progreso</div><div class="th">Esta semana</div><div class="th">Estado</div>';
   }
-  list.innerHTML=sorted.map(m=>renderMetaRow(m,currentView)).join('');
+  list.innerHTML=sorted.map((m,i)=>{
+    const prevCat=i>0?sorted[i-1].category||'':'__start__';
+    const thisCat=m.category||'';
+    const catChanged=i>0&&prevCat!==thisCat;
+    const catLabel={trading:'💹 Trading',musica:'🎵 Música',academia:'📚 Academia',personal:'🌱 Personal','':'Sin categoría'};
+    const separator=catChanged?`<div style="display:grid;grid-template-columns:40px 260px 1fr 190px 100px;column-gap:16px;padding:8px 22px 4px;border-top:1.5px solid var(--border)"><div></div><div style="font-size:9.5px;font-weight:600;color:var(--t4);letter-spacing:0.1em;text-transform:uppercase;grid-column:2/-1">${catLabel[thisCat]||thisCat}</div></div>`:'';
+    return separator+renderMetaRow(m,currentView);
+  }).join('');
 }
 
 function renderMetaRow(m,view){
@@ -991,8 +1032,14 @@ function renderMetaRow(m,view){
     else if(risk)checkHtml='<div class="check-c warn"><i class="ti ti-alert-triangle"></i></div>';
     else checkHtml='<div class="check-c"></div>';
   }
-  const typeSub=m.type==='consistencia'?`${m.freq||4} d/sem`:m.type==='hito'?`${prog.current}/${prog.total} pasos`:`${m.unit||''} · ${m.period||'Mensual'}`;
-  const prgLabel=m.type==='consistencia'?`${prog.current} de ${prog.total} días`:m.type==='hito'?`${prog.current} de ${prog.total} pasos`:`${m.unit||''}${prog.current} / ${m.unit||''}${prog.total}`;
+  const typeSub=m.type==='consistencia'
+    ?(m.freqType==='mensual'?`${m.freqMensual||1}x/mes`:`${m.freq||4} d/sem`)
+    :m.type==='hito'?`${prog.current}/${prog.total} pasos`
+    :`${m.unit||''} · ${m.period||'Mensual'}`;
+  const prgLabel=m.type==='consistencia'
+    ?(m.freqType==='mensual'?`${prog.current} de ${prog.total} este mes · ${prog.totalDone||0} total`:`${prog.current} de ${prog.total} días`)
+    :m.type==='hito'?`${prog.current} de ${prog.total} pasos`
+    :`${m.unit||''}${prog.current} / ${m.unit||''}${prog.total}`;
   const prgCls=risk?'warn':isDone?'gdone':'';
   const pvalCls=risk?'warn':isDone?'gdone':'';
   const progHtml=`<div class="prog-wrap"><div class="prog-labels"><span>${prgLabel}</span><span class="pval ${pvalCls}">${prog.pct}%</span></div><div class="bar-track"><div class="bar-fill ${prgCls} ${isDone?'full':''}" style="width:${prog.pct}%"></div></div></div>`;
@@ -1066,12 +1113,18 @@ window.toggleToday=async(id,e)=>{
 
 window.openCreateModal=()=>{
   subtasks=[];selectedCat='';
-  ['metaName','metaWhy','metaDeadline','metaTarget','metaUnit','metaStartDate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
+  ['metaName','metaWhy','metaDeadline','metaTarget','metaUnit','metaStartDate','metaEndDate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
   document.getElementById('freqVal').textContent='4';
   selectedType='consistencia';selectedPeriod='mensual';
   document.querySelectorAll('.type-opt').forEach(o=>o.classList.remove('selected'));
   document.querySelector('[onclick*="consistencia"]').classList.add('selected');
   document.querySelectorAll('#catSelector .period-opt').forEach(o=>o.classList.remove('selected'));
+  // Reset freq type to semanal
+  const _fts=document.getElementById('freqTypeSelector');
+  if(_fts){_fts.querySelectorAll('.period-opt').forEach((o,i)=>o.classList.toggle('selected',i===0));}
+  const _fs=document.getElementById('freqSemanal');if(_fs)_fs.style.display='block';
+  const _fm=document.getElementById('freqMensual');if(_fm)_fm.style.display='none';
+  const _fmv=document.getElementById('freqMensualVal');if(_fmv)_fmv.textContent='1';
   // Reset start selector
   document.querySelectorAll('#startSelector .period-opt').forEach(o=>o.classList.remove('selected'));
   const firstStart=document.querySelector('#startSelector .period-opt');if(firstStart)firstStart.classList.add('selected');
@@ -1106,6 +1159,19 @@ window.selectCat=(el)=>{
 window.changeFreq=(delta)=>{
   const el=document.getElementById('freqVal');
   el.textContent=Math.max(1,Math.min(7,parseInt(el.textContent)+delta));
+};
+
+window.changeFreqMensual=(delta)=>{
+  const el=document.getElementById('freqMensualVal');
+  el.textContent=Math.max(1,Math.min(31,parseInt(el.textContent)+delta));
+};
+
+window.selectFreqType=(el)=>{
+  el.closest('.period-selector').querySelectorAll('.period-opt').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+  const type=el.dataset.freqtype;
+  document.getElementById('freqSemanal').style.display=type==='semanal'?'block':'none';
+  document.getElementById('freqMensual').style.display=type==='mensual'?'block':'none';
 };
 
 window.selectPeriod=(el)=>{
@@ -1145,8 +1211,18 @@ window.createMeta=async()=>{
 
   const meta={name,type:selectedType,why:document.getElementById('metaWhy').value.trim(),category:selectedCat,createdAt:new Date().toISOString(),startDate,completedDays:[],archived:false};
   if(selectedType==='consistencia'){
-    meta.freq=parseInt(document.getElementById('freqVal').textContent);
-    meta.days=[...document.querySelectorAll('#daySelector .period-opt.selected')].map(o=>o.dataset.day);
+    const freqTypeSel=document.querySelector('#freqTypeSelector .period-opt.selected');
+    const freqType=freqTypeSel?freqTypeSel.dataset.freqtype:'semanal';
+    meta.freqType=freqType;
+    if(freqType==='mensual'){
+      meta.freqMensual=parseInt(document.getElementById('freqMensualVal').textContent)||1;
+      meta.endDate=document.getElementById('metaEndDate').value||null;
+      meta.freq=meta.freqMensual;
+      meta.days=[];
+    }else{
+      meta.freq=parseInt(document.getElementById('freqVal').textContent);
+      meta.days=[...document.querySelectorAll('#daySelector .period-opt.selected')].map(o=>o.dataset.day);
+    }
   }else if(selectedType==='hito'){
     meta.subtasks=subtasks.map(s=>({...s}));
     meta.deadline=document.getElementById('metaDeadline').value||null;
@@ -1389,7 +1465,11 @@ function formatNotaDate(iso){
   return d.toLocaleDateString('es-AR',{day:'numeric',month:'short'});
 }
 
-window.selectNota=(id)=>{
+window.selectNota=async(id)=>{
+  // Save current note before switching
+  if(currentNotaId && currentNotaId !== id){
+    await saveNotaImmediate(currentNotaId);
+  }
   currentNotaId=id;
   const n=notas.find(x=>x.id===id);
   if(!n)return;
@@ -1490,16 +1570,28 @@ function scheduleNotaSave(id){
   const statusEl=document.getElementById('notaSaveStatus');
   if(statusEl)statusEl.innerHTML='<i class="ti ti-cloud-upload"></i> Guardando...';
   clearTimeout(notaSaveTimeout);
-  notaSaveTimeout=setTimeout(()=>saveNota(id),800);
+  notaSaveTimeout=setTimeout(()=>saveNota(id),600);
+}
+
+async function saveNotaImmediate(id){
+  clearTimeout(notaSaveTimeout);
+  await saveNota(id);
 }
 
 async function saveNota(id){
-  const title=document.getElementById('notaTitleInput')?.value||'';
-  const content=document.getElementById('notaContentEditor')?.innerHTML||'';
+  const titleEl=document.getElementById('notaTitleInput');
+  const contentEl=document.getElementById('notaContentEditor');
+  if(!titleEl&&!contentEl)return; // editor not open
+  const title=titleEl?titleEl.value:'';
+  const content=contentEl?contentEl.innerHTML:'';
+  // Update local cache immediately so switching notes doesn't lose data
+  const m=notas.find(x=>x.id===id);
+  if(m){m.title=title;m.content=content;m.updatedAt=new Date().toISOString();}
   try{
     await updateDoc(doc(db,'users',currentUser.uid,'notas',id),{title,content,updatedAt:new Date().toISOString()});
     const statusEl=document.getElementById('notaSaveStatus');
     if(statusEl)statusEl.innerHTML='<i class="ti ti-cloud-check"></i> Guardado';
+    renderNotasList(); // update preview in list
   }catch(e){
     const statusEl=document.getElementById('notaSaveStatus');
     if(statusEl)statusEl.innerHTML='<i class="ti ti-alert-triangle"></i> Error al guardar';
@@ -1593,8 +1685,16 @@ window.filterNotas=()=>{
 // Extend showPage to load notas
 const _origShowPage=window.showPage;
 window.showPage=(page,el)=>{
+  // Save current nota before leaving
+  if(currentNotaId && page !== 'notas') saveNotaImmediate(currentNotaId);
   _origShowPage(page,el);
   if(page==='notas'&&currentUser&&!unsubNotas)loadNotas();
+};
+
+// Fix 3: openCloseMeta was missing
+window.openCloseMeta=(id)=>{
+  closingMetaId=id;
+  document.getElementById('closeMetaModal').classList.add('open');
 };
 
 window.handleCloseOpt=async(opt)=>{
