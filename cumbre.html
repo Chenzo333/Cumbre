@@ -129,12 +129,12 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .meta-row.view-detail{grid-template-columns:40px 260px 1fr 100px;column-gap:16px}
 .meta-row.view-semana{grid-template-columns:40px 220px 48px 48px 48px 48px 48px 48px;column-gap:8px}
 .meta-row::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:0;border-radius:0 3px 3px 0;background:var(--accent);transition:height 0.18s ease;pointer-events:none}
-.meta-row:hover::before{height:28px}.meta-row.risk::before{height:28px;background:var(--red)}
-.meta-row.risk{background:rgba(239,68,68,0.018)}.meta-row.done{opacity:0.42}
+.meta-row:hover::before{height:28px}.meta-row.risk::before{height:28px;background:var(--accent)}
+.meta-row.risk{background:rgba(232,112,58,0.018)}.meta-row.done{opacity:0.42}
 .check-c{width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(0,0,0,0.12);display:flex;align-items:center;justify-content:center;transition:all 0.18s;cursor:pointer;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
 .check-c:hover{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-soft)}
 .check-c.done{background:var(--blue);border-color:var(--blue);box-shadow:0 2px 8px var(--blue-glow)}
-.check-c.done i{font-size:12px;color:white}.check-c.warn{border-color:var(--red)}.check-c.warn i{font-size:12px;color:var(--red)}
+.check-c.done i{font-size:12px;color:white}.check-c.warn{border-color:var(--accent)}.check-c.warn i{font-size:12px;color:var(--accent)}
 .m-name{font-size:13.5px;font-weight:500;color:var(--t1);letter-spacing:-0.2px}
 .m-type{font-size:10.5px;color:var(--t3);margin-top:3px;display:flex;align-items:center;gap:5px}
 .type-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:500}
@@ -156,7 +156,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .d.no{background:var(--bg2);color:var(--t4)}.d.now{border:1.5px solid var(--blue);color:var(--blue)}.d.wnow{border:1.5px dashed var(--red);color:var(--red)}
 .d.inactive{background:transparent;color:var(--t4);opacity:0.25}
 .status-ok{font-size:11.5px;font-weight:600;color:var(--blue)}
-.status-risk{font-size:11.5px;font-weight:600;color:var(--red);display:flex;align-items:center;gap:4px}
+.status-risk{font-size:11.5px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:4px}
 .status-done{font-size:11.5px;font-weight:600;color:var(--green)}.status-neutral{font-size:11px;color:var(--t3)}
 .semana-cell{display:flex;align-items:center;justify-content:center}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 20px;gap:10px;color:var(--t4)}
@@ -871,15 +871,77 @@ function isCompletedToday(m){
 }
 
 function isAtRisk(m){
+  const now=new Date();
   const t=today();
-  // Not at risk if meta hasn't started yet
+  const hour=now.getHours();
+
+  // Never at risk if hasn't started
   if(m.startDate&&m.startDate>t)return false;
+
   if(m.type==='consistencia'){
     const days=m.completedDays||[];
-    const y=new Date();y.setDate(y.getDate()-1);
-    const y2=new Date();y2.setDate(y2.getDate()-2);
-    return!days.includes(t)&&!days.includes(y.toISOString().split('T')[0])&&!days.includes(y2.toISOString().split('T')[0]);
+    const freq=m.freq||4;
+
+    // Monthly: not at risk during month unless mathematically impossible
+    if(m.freqType==='mensual'){
+      const monthStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const doneThisMonth=days.filter(d=>d.startsWith(monthStr)).length;
+      const target=m.freqMensual||1;
+      const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+      const daysLeft=daysInMonth-now.getDate(); // days remaining after today
+      return doneThisMonth+daysLeft+1<target; // +1 for today
+    }
+
+    // Get week start (Monday)
+    const dow=now.getDay();
+    const ws=new Date(now);ws.setDate(now.getDate()-(dow===0?6:dow-1));ws.setHours(0,0,0,0);
+
+    // Count completions this week
+    let doneThisWeek=0;
+    for(let i=0;i<7;i++){
+      const d=new Date(ws);d.setDate(ws.getDate()+i);
+      if(days.includes(d.toISOString().split('T')[0]))doneThisWeek++;
+    }
+
+    // MODE A — fixed days configured
+    const metaDays=m.days||[];
+    if(metaDays.length>0){
+      const dayMap={L:1,M:2,X:3,J:4,V:5,S:6,D:0};
+      // Count active days remaining this week (including today if not yet 20hs or not done)
+      let activeDaysLeft=0;
+      for(let i=0;i<7;i++){
+        const d=new Date(ws);d.setDate(ws.getDate()+i);
+        const dayIdx=d.getDay();
+        const label=Object.keys(dayMap).find(k=>dayMap[k]===dayIdx);
+        if(!metaDays.includes(label))continue;
+        const dStr=d.toISOString().split('T')[0];
+        if(days.includes(dStr))continue; // already done
+        if(dStr<t)continue; // past day, missed
+        if(dStr===t&&hour>=20)continue; // today past 20hs, can't do
+        activeDaysLeft++;
+      }
+      const stillNeeded=freq-doneThisWeek;
+      // At risk if today is an active day, past 20hs, not done, AND can't reach freq
+      const todayLabel=Object.keys(dayMap).find(k=>dayMap[k]===now.getDay());
+      const todayIsActive=metaDays.includes(todayLabel);
+      const todayDone=days.includes(t);
+      const pastCutoff=hour>=20;
+      if(!todayDone&&todayIsActive&&pastCutoff&&stillNeeded>activeDaysLeft)return true;
+      if(stillNeeded>0&&activeDaysLeft===0&&doneThisWeek<freq)return true;
+      return false;
+    }
+
+    // MODE B — free frequency (no fixed days)
+    // Count days remaining in week (today + future days)
+    const todayDayIdx=dow===0?7:dow; // 1=Mon...7=Sun
+    const daysLeftInWeek=7-todayDayIdx+1; // including today
+    const stillNeeded=freq-doneThisWeek;
+    // Today after 20hs counts as "can't do today"
+    const canDoToday=!days.includes(t)&&hour<20;
+    const effectiveDaysLeft=canDoToday?daysLeftInWeek:daysLeftInWeek-1;
+    return stillNeeded>0&&effectiveDaysLeft<stillNeeded;
   }
+
   if(m.type==='hito'){
     if(!m.subtasks||!m.subtasks.length||m.subtasks.every(s=>s.done))return false;
     const ld=m.subtasks.filter(s=>s.doneDate).map(s=>s.doneDate).sort().reverse()[0];
@@ -1018,7 +1080,7 @@ function renderMetasList(){
     const catColors={'trading':'#3B82F6','musica':'#A855F7','academia':'#22C55E','personal':'#E8703A','':'var(--t4)'};
     const catLabel={'trading':'💹 Trading','musica':'🎵 Música','academia':'📚 Academia','personal':'🌱 Personal','':'Sin categoría'};
     const catColor=catColors[thisCat]||'var(--t4)';
-    const separator=catChanged?`<div style="padding:10px 22px 4px;border-top:${i>0?'2px solid '+catColor:'none'};margin-top:${i>0?'4px':'0'}"><span style="font-size:9.5px;font-weight:700;color:${catColor};letter-spacing:0.1em;text-transform:uppercase">${catLabel[thisCat]||thisCat}</span></div>`:'';
+    const separator=catChanged?`<div style="display:flex;align-items:center;gap:8px;padding:10px 22px 6px;${i>0?'border-top:0.5px solid var(--border2)':''}"><div style="width:3px;height:14px;background:${catColor};flex-shrink:0;border-radius:0"></div><span style="font-size:9.5px;font-weight:700;color:${catColor};letter-spacing:0.1em;text-transform:uppercase">${catLabel[thisCat]||thisCat}</span></div>`:'';
     return separator+renderMetaRow(m,currentView);
   }).join('');
 }
@@ -1058,11 +1120,9 @@ function renderMetaRow(m,view){
   const pvalCls=risk?'warn':isDone?'gdone':'';
   const progHtml=`<div class="prog-wrap"><div class="prog-labels"><span>${prgLabel}</span><span class="pval ${pvalCls}">${prog.pct}%</span></div><div class="bar-track"><div class="bar-fill ${prgCls} ${isDone?'full':''}" style="width:${prog.pct}%"></div></div></div>`;
   const weekHtml=m.type==='consistencia'?`<div class="dots">${getWeekDots(m).map(d=>`<div class="d ${d.cls}">${d.label}</div>`).join('')}</div>`:`<div style="font-size:10.5px;color:var(--t4)">—</div>`;
-  const statusHtml=isDone?'<div class="status-done">✓ Lograda</div>':risk?'<div class="status-risk"><i class="ti ti-alert-triangle" style="font-size:12px"></i> Riesgo</div>':'<div class="status-ok">Al día</div>';
+  const statusHtml=isDone?'<div class="status-done">✓ Lograda</div>':risk?'<div class="status-risk"><i class="ti ti-alert-triangle" style="font-size:12px"></i> Atención</div>':'<div class="status-ok">Al día</div>';
   // nameCell defined above
-  const catColor=getCatColor(m.category);
-  const catBorder=catColor?`border-left:3px solid ${catColor};padding-left:19px`:'';
-  if(view==='compact')return`<div class="meta-row ${vc} ${risk?'risk':''} ${isDone?'done':''}" style="${catBorder}" onclick="openDetailModal('${m.id}')">${checkHtml}${nameCell}${progHtml}${weekHtml}${statusHtml}</div>`;
+  if(view==='compact')return`<div class="meta-row ${vc} ${risk?'risk':''} ${isDone?'done':''}" onclick="openDetailModal('${m.id}')">${checkHtml}${nameCell}${progHtml}${weekHtml}${statusHtml}</div>`;
   if(view==='detail'){
     const why=m.why?`<div style="font-family:var(--font);font-style:normal;font-size:12px;color:var(--t2);margin-top:5px;border-left:2px solid var(--accent);padding-left:7px;line-height:1.5">${m.why}</div>`:'';
     return`<div class="meta-row ${vc} ${risk?'risk':''} ${isDone?'done':''}" onclick="openDetailModal('${m.id}')">${checkHtml}<div><div class="m-name">${m.name}</div><div class="m-type">${catDot}<span class="type-badge ${typeCls}"><i class="ti ${typeIcon}" style="font-size:9px"></i> ${typeLabel}</span></div>${why}</div>${progHtml}${statusHtml}</div>`;
@@ -1323,7 +1383,7 @@ function renderDetailModal(m){
   const band=document.getElementById('detailHeaderBand');
   const notStarted=m.startDate&&m.startDate>today();
   band.className='detail-header-band'+(notStarted?' orange':risk?' orange':prog.pct>=100?' green':'');
-  document.getElementById('detailBadge').textContent=(m.type==='consistencia'?'🔁 Consistencia':m.type==='hito'?'🎯 Hito':'📈 Resultado')+(notStarted?` · Empieza ${formatDate(m.startDate)}`:'');
+  document.getElementById('detailBadge').textContent=(m.type==='consistencia'?'🔁 Consistencia':m.type==='hito'?'🎯 Hito':'📈 Resultado')+(notStarted?` · Empieza ${formatDate(m.startDate)}`:'')+(risk?' · ⚠️ Atención':'');
   document.getElementById('detailTitle').textContent=m.name;
   document.getElementById('detailProgressFill').style.width=prog.pct+'%';
   document.getElementById('detailProgressRight').textContent=prog.pct+'%';
